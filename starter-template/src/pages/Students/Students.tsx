@@ -1,21 +1,31 @@
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { getStudents } from "apis/student.api";
 import useQueryString from "../../hooks/useQueryString";
 import { PAGE_LIMIT } from "constant";
 import classname from "classnames";
+
 export default function Students() {
   const queryString = useQueryString();
   const page = Number(queryString.page) || 1;
   const { data, isLoading } = useQuery({
     queryKey: ["students", page],
     queryFn: () => getStudents(page, PAGE_LIMIT),
+    placeholderData: keepPreviousData,
   });
   const totalStudentCount = Number(data?.headers["x-total-count"] || 0);
   const totalPage = Math.ceil(totalStudentCount / PAGE_LIMIT);
+  console.log(data?.data);
+
   return (
     <div>
       <h1 className="text-lg">Students</h1>
+      <Link
+        to={`/students/add`}
+        className="rounded bg-blue-600 px-5 py-2.5 font-medium text-white hover:underline"
+      >
+        Add
+      </Link>
       {isLoading && (
         <div role="status" className="mt-6 animate-pulse">
           <div className="mb-4 h-4  rounded bg-gray-200 dark:bg-gray-700" />
@@ -79,7 +89,10 @@ export default function Students() {
                   >
                     Edit
                   </Link>
-                  <button className="font-medium text-red-600 dark:text-red-500">
+                  <button
+                    className="font-medium text-red-600 dark:text-red-500"
+                    disabled={isLoading}
+                  >
                     Delete
                   </button>
                 </td>
@@ -117,7 +130,7 @@ export default function Students() {
                   <li key={pageNumber}>
                     <Link
                       className={classname(
-                        "border border-gray-300 py-2 px-3 leading-tight text-gray-500 text-gray-500  hover:bg-gray-100 hover:bg-gray-100 hover:text-gray-700 hover:text-gray-700",
+                        "border border-gray-300 py-2 px-3 leading-tight text-gray-500   hover:bg-gray-100  hover:text-gray-700",
                         {
                           "bg-gray-100 text-gray-700": isActive,
                           "bg-white text-gray-500": !isActive,
