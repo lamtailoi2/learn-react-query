@@ -1,11 +1,13 @@
-import { useMatch } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMatch, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Student } from "types/student.type";
-import { useState } from "react";
-import { addStudent } from "apis/student.api";
+import { useMemo, useState } from "react";
+import { addStudent, getStudent, updateStudent } from "apis/student.api";
+import { isAxiosErrors } from "utils";
+import { toast } from "react-toastify";
 type FormType = Omit<Student, "id">;
 
-const intFormValue: FormType = {
+const initFormState: FormType = {
   first_name: "",
   last_name: "",
   email: "",
@@ -15,35 +17,94 @@ const intFormValue: FormType = {
   btc_address: "",
 };
 
-export default function AddStudent() {
-  const [formSate, setFormState] = useState<FormType>(intFormValue);
-  const match = useMatch("/students/add");
-  const isAdd = Boolean(match);
-  const mutation = useMutation({
-    mutationFn: (body: FormType) => {
-      console.log(body);
+type ErrorForm =
+  | {
+      [key in keyof FormType]: string;
+    }
+  | null;
 
+export default function AddStudent() {
+  const [formSate, setFormState] = useState<FormType>(initFormState);
+  const { id } = useParams();
+  const match = useMatch("/students/add");
+  const isAddMode = Boolean(match);
+  const queryClient = useQueryClient();
+  const addStudentMutation = useMutation({
+    mutationFn: (body: FormType) => {
       return addStudent(body);
     },
   });
-  console.log(formSate);
+
+  const updateStudentMutation = useMutation({
+    mutationFn: (_) => updateStudent(id as string, formSate),
+  });
+
+  useQuery({
+    queryKey: ["student", id],
+    queryFn: () =>
+      getStudent(id as string).then((res) => {
+        setFormState(res.data);
+        return res;
+      }),
+    enabled: !!id,
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormState((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    if (addStudentMutation.data || addStudentMutation.error) {
+      addStudentMutation.reset();
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isAddMode) {
+      addStudentMutation.mutate(formSate, {
+        onSuccess: (data) => {
+          toast.success("Add Successful!");
+          setFormState(initFormState);
+        },
+        onError: (err) => {
+          console.log("🚀 ~ handleSubmit ~ err:", err);
+        },
+      });
+    } else {
+      updateStudentMutation.mutate(undefined, {
+        onSuccess: (data) => {
+          toast.success("Update Successful!");
+          queryClient.setQueryData(["student", id], data);
+        },
+      });
+    }
+  };
+
+  const errorForm: ErrorForm = useMemo(() => {
+    const error = isAddMode
+      ? addStudentMutation.error
+      : updateStudentMutation.error;
+    if (
+      isAxiosErrors<{ error: ErrorForm }>(error) &&
+      error.response?.status === 422
+    ) {
+      return error.response?.data.error;
+    }
+    return null;
+  }, [addStudentMutation.error, updateStudentMutation.error, isAddMode]);
 
   return (
     <div>
-      <h1 className="text-lg">{isAdd ? "Add" : "Edit"} Student</h1>
-      <form className="mt-6">
+      <h1 className="text-lg">{isAddMode ? "Add" : "Edit"} Student</h1>
+      <form className="mt-6" onSubmit={handleSubmit}>
         <div className="group relative z-0 mb-6 w-full">
           <input
-            type="email"
-            name="floating_email"
-            id="floating_email"
-            className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent py-2.5 px-0 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600 dark:focus:border-blue-500"
+            type="text"
+            name="email"
+            id="email"
+            className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent px-0 py-2.5 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600 dark:focus:border-blue-500"
             placeholder=" "
             required
             value={formSate.email}
-            onChange={(e) =>
-              setFormState((prev) => ({ ...prev, email: e.target.value }))
-            }
+            onChange={handleChange}
           />
           <label
             htmlFor="floating_email"
@@ -51,6 +112,7 @@ export default function AddStudent() {
           >
             Email address
           </label>
+          {errorForm && <span className="text-red-400">{errorForm.email}</span>}
         </div>
 
         <div className="group relative z-0 mb-6 w-full">
@@ -61,14 +123,9 @@ export default function AddStudent() {
                   id="gender-1"
                   type="radio"
                   name="gender"
-                  value={formSate.gender}
-                  checked={formSate.gender === "Male"}
-                  onChange={(e) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      gender: e.target.value,
-                    }))
-                  }
+                  value={"male"}
+                  checked={formSate.gender === "male"}
+                  onChange={handleChange}
                   className="h-4 w-4 border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
                 />
                 <label
@@ -83,7 +140,9 @@ export default function AddStudent() {
                   defaultChecked
                   id="gender-2"
                   type="radio"
+                  value="female"
                   name="gender"
+                  onChange={handleChange}
                   className="h-4 w-4 border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
                 />
                 <label
@@ -98,7 +157,9 @@ export default function AddStudent() {
                   defaultChecked
                   id="gender-3"
                   type="radio"
+                  value="other"
                   name="gender"
+                  onChange={handleChange}
                   className="h-4 w-4 border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
                 />
                 <label
@@ -116,13 +177,11 @@ export default function AddStudent() {
             type="text"
             name="country"
             id="country"
-            className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent py-2.5 px-0 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
+            className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent px-0 py-2.5 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
             placeholder=" "
             required
             value={formSate.country}
-            onChange={(e) =>
-              setFormState((prev) => ({ ...prev, country: e.target.value }))
-            }
+            onChange={handleChange}
           />
           <label
             htmlFor="country"
@@ -135,19 +194,13 @@ export default function AddStudent() {
           <div className="group relative z-0 mb-6 w-full">
             <input
               type="tel"
-              pattern="[0-9]{3}-[0-9]{3}-[0-9]{4}"
               name="first_name"
               id="first_name"
-              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent py-2.5 px-0 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
+              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent px-0 py-2.5 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
               placeholder=" "
               required
               value={formSate.first_name}
-              onChange={(e) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  first_name: e.target.value,
-                }))
-              }
+              onChange={handleChange}
             />
             <label
               htmlFor="first_name"
@@ -161,13 +214,11 @@ export default function AddStudent() {
               type="text"
               name="last_name"
               id="last_name"
-              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent py-2.5 px-0 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
+              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent px-0 py-2.5 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
               placeholder=" "
               required
               value={formSate.last_name}
-              onChange={(e) =>
-                setFormState((prev) => ({ ...prev, last_name: e.target.value }))
-              }
+              onChange={handleChange}
             />
             <label
               htmlFor="last_name"
@@ -183,13 +234,11 @@ export default function AddStudent() {
               type="text"
               name="avatar"
               id="avatar"
-              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent py-2.5 px-0 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
+              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent px-0 py-2.5 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
               placeholder=" "
               required
               value={formSate.avatar}
-              onChange={(e) =>
-                setFormState((prev) => ({ ...prev, avatar: e.target.value }))
-              }
+              onChange={handleChange}
             />
             <label
               htmlFor="avatar"
@@ -203,16 +252,11 @@ export default function AddStudent() {
               type="text"
               name="btc_address"
               id="btc_address"
-              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent py-2.5 px-0 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
+              className="peer block w-full appearance-none border-0 border-b-2 border-gray-300 bg-transparent px-0 py-2.5 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-0 dark:border-gray-600  dark:focus:border-blue-500"
               placeholder=" "
               required
               value={formSate.btc_address}
-              onChange={(e) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  btc_address: e.target.value,
-                }))
-              }
+              onChange={handleChange}
             />
             <label
               htmlFor="btc_address"
@@ -225,9 +269,14 @@ export default function AddStudent() {
 
         <button
           type="submit"
-          className="w-full rounded-lg bg-blue-700 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800 sm:w-auto"
+          className="w-full rounded-lg bg-blue-700 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+          disabled={
+            isAddMode
+              ? addStudentMutation.isPending
+              : updateStudentMutation.isPending
+          }
         >
-          Submit
+          {isAddMode ? "Add" : "Update"}
         </button>
       </form>
     </div>
