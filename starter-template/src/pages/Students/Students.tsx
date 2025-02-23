@@ -5,7 +5,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { deleteStudent, getStudents } from "apis/student.api";
+import { deleteStudent, getStudent, getStudents } from "apis/student.api";
 import useQueryString from "../../hooks/useQueryString";
 import { PAGE_LIMIT } from "constant";
 import classname from "classnames";
@@ -16,7 +16,7 @@ export default function Students() {
   const queryClient = useQueryClient();
 
   const page = Number(queryString.page) || 1;
-  const { data, isLoading } = useQuery({
+  const studentsQuery = useQuery({
     queryKey: ["students", page],
     queryFn: () => getStudents(page, PAGE_LIMIT),
     placeholderData: keepPreviousData,
@@ -29,11 +29,21 @@ export default function Students() {
         queryClient.invalidateQueries({ queryKey: ["students", page] });
       }),
   });
-  const totalStudentCount = Number(data?.headers["x-total-count"] || 0);
+  const totalStudentCount = Number(
+    studentsQuery.data?.headers["x-total-count"] || 0
+  );
   const totalPage = Math.ceil(totalStudentCount / PAGE_LIMIT);
   const handleDelete = (id: number | string) => {
     deleteStudentMutation.mutate(id);
   };
+
+  const handlePrefetch = (id: number) => {
+    queryClient.prefetchQuery({
+      queryKey: ["student", String(id)],
+      queryFn: () => getStudent(id),
+    });
+  };
+
   return (
     <div>
       <h1 className="text-lg">Students</h1>
@@ -43,7 +53,7 @@ export default function Students() {
       >
         Add
       </Link>
-      {isLoading && (
+      {studentsQuery.isLoading && (
         <div role="status" className="mt-6 animate-pulse">
           <div className="mb-4 h-4  rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mb-2.5 h-10  rounded bg-gray-200 dark:bg-gray-700" />
@@ -83,10 +93,11 @@ export default function Students() {
             </tr>
           </thead>
           <tbody>
-            {data?.data.map((student) => (
+            {studentsQuery.data?.data.map((student) => (
               <tr
                 key={student.id}
                 className="border-b bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-600"
+                onMouseEnter={() => handlePrefetch(student.id)}
               >
                 <td className="px-6 py-4">{student.id}</td>
                 <td className="px-6 py-4">
@@ -109,7 +120,9 @@ export default function Students() {
                   <button
                     className="font-medium text-red-600 dark:text-red-500"
                     onClick={() => handleDelete(student.id)}
-                    disabled={isLoading || deleteStudentMutation.isPending}
+                    disabled={
+                      studentsQuery.isLoading || deleteStudentMutation.isPending
+                    }
                   >
                     Delete
                   </button>

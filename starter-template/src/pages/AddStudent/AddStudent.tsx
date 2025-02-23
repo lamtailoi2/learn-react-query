@@ -1,7 +1,7 @@
 import { useMatch, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Student } from "types/student.type";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addStudent, getStudent, updateStudent } from "apis/student.api";
 import { isAxiosErrors } from "utils";
 import { toast } from "react-toastify";
@@ -39,15 +39,18 @@ export default function AddStudent() {
     mutationFn: (_) => updateStudent(id as string, formSate),
   });
 
-  useQuery({
+  const studentQuery = useQuery({
     queryKey: ["student", id],
-    queryFn: () =>
-      getStudent(id as string).then((res) => {
-        setFormState(res.data);
-        return res;
-      }),
+    queryFn: () => getStudent(id as string),
+    staleTime: 1000 * 10,
     enabled: !!id,
   });
+
+  useEffect(() => {
+    if (studentQuery.data) {
+      setFormState(studentQuery.data.data);
+    }
+  }, [studentQuery.data]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormState((prev) => ({ ...prev, [e.target.name]: e.target.value }));
